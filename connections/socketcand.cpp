@@ -9,8 +9,8 @@
 
 #include "socketcand.h"
 
-SocketCANd::SocketCANd(QString portName) :
-    CANConnection(portName, "kayak", CANCon::KAYAK, 0, 0, false, 0, 1, 4000, true),
+SocketCANd::SocketCANd(QString portName, bool canFd) :
+    CANConnection(portName, "kayak", CANCon::KAYAK, 0, 0, canFd, 0, 1, 4000, true),
     mTimer(this) /*NB: set this as parent of timer to manage it from working thread */
 {
 
@@ -21,6 +21,7 @@ SocketCANd::SocketCANd(QString portName) :
     sendDebug("SocketCANd()");
     //tcpClient = nullptr;
     hostCanIDs = portName.left(portName.indexOf("@")).split(',');
+    // <channel>@<hostname_string> (can://<ip>:<port>)
     QString hostIPandPort = portName.mid(portName.indexOf("can://")+6, portName.length() - portName.indexOf("can://") - 7); //7 is lenght of 'can://' and ')'
     hostIP = QHostAddress(hostIPandPort.left(hostIPandPort.indexOf(":")));
     hostPort = (hostIPandPort.right(hostIPandPort.length() - hostIPandPort.lastIndexOf(":") -1)).toInt();
@@ -154,7 +155,25 @@ bool SocketCANd::piSendFrame(const CANFrame& frame)
     ID = frame.frameId();
     if (frame.hasExtendedFrameFormat()) ID |= 1 << 31;
 
-    QString sendStr = "< send " + QString::number(ID, 16) + " " + QString::number(frame.payload().length()) + " ";
+
+    QString sendStr = ""
+    if (frame.hasFlexibleDataRateFormat()){
+        // CAN FD Frame
+
+        int flags = 0;
+        if(frame.setBitrateSwitch()){
+            flags |= 0x01;
+        }
+        if(frame.hasErrorStateIndicator()){
+            flags |= 0x02;
+        }
+
+        sendStr = "< fdsend " + QString::number(ID, 16) + " " + QString::number(flags) + " " + QString::number(frame.payload().length()) + " ";
+
+    }else{
+        sendStr = "< send " + QString::number(ID, 16) + " " + QString::number(frame.payload().length()) + " ";
+    }
+    
     for (c = 0; c < frame.payload().length(); c++)
     {
        sendStr.append(QString::number(frame.payload()[c], 16) + " ");
@@ -254,46 +273,73 @@ QString SocketCANd::decodeFrames(QString data, int busNum)
 {
     if (data.indexOf("<") == -1)
         return "";
-    else if(data.length() >= 8 && data.indexOf("< frame ") == -1)
+    else if(data.length() >= 10 && (data.indexOf("< frame ") == -1 && data.indexOf("< fdframe ")))
         return "";
 
-    int firstIndex = data.indexOf("< frame ");
+    int firstIndex = data.indexOf(QRegularExpression("\\< f(df)?rame "));
     if(firstIndex > 0)
     {
         QString framePartial = data.left(firstIndex);
-        qDebug() << "Received datagramm that starts with fragment (missing '< frame'), this should only occur on startup, removing...: " << framePartial;
+        qDebug() << "Received datagramm that starts with fragment (missing '< frame' or '< fdframe'), this should only occur on startup, removing...: " << framePartial;
     }
     QString framePart = data.mid(firstIndex); //remove starting beginning of payload if not < frame >
     const QString frameStrConst = framePart.left(framePart.indexOf(">")+1);
     QString frameStr = frameStrConst;
     QStringList frameParsed = (frameStr.remove(QRegularExpression("^<")).remove(QRegularExpression(">$"))).simplified().split(' ');
 
-    if(frameParsed.length() < 3)
-    {
-        //qDebug() << "Received datagramm is an incomplete frame: " << data;
+    if(frameParsed.length() < 4)
+    { 
+        // fd frame min size is 4, frame min size is 3
+        if(frameParsed[0] != "fdframe" && frameParsed.length() < 3)
+        {
+            //qDebug() << "Received datagramm is an incomplete frame: " << data;
 
-        //ok great, need to leave it in the buffer in case it can be combined with what comes next
-        //but if there was a fragment that did not have a starting token then we don't want it so only return
-        //known good data...again this should only happen on startup, but just in case we need to remove it
-        //so the data buffer doesn't grow uncontrolled.
-        return framePart;
+            //ok great, need to leave it in the buffer in case it can be combined with what comes next
+            //but if there was a fragment that did not have a starting token then we don't want it so only return
+            //known good data...again this should only happen on startup, but just in case we need to remove it
+            //so the data buffer doesn't grow uncontrolled.
+            return framePart;
+        }
+        
+    }
+    int framelength = 0;
+    int data_index = 0;
+    buildFrame.setFrameId(frameParsed[1].toUInt(nullptr, 16));
+    if(frameParsed[0] == "fdframe"){
+        buildFrame.setFlexibleDataRateFormat(true)
+        // check for BRS
+        if(frameParsed[2]&0x01){
+            buildFrame.setBitrateSwitch(true);
+        }
+        // check for error state indicator
+        if(frameParsed[2]&0x02 > 0){
+            buildFrame.setErrorStateIndicator(true)
+        }
+        buildFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, frameParsed[3].toDouble() * 1000000l));
+        if(frameParsed.length() == 5)
+        {
+            framelength = frameParsed[4].length() * 0.5;
+        }
+        data_index = 4;
+
+    }else{
+        buildFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, frameParsed[2].toDouble() * 1000000l));
+        if(frameParsed.length() == 4)
+        {
+            framelength = frameParsed[3].length() * 0.5;
+        }
+        data_index = 3;
     }
 
-    buildFrame.setFrameId(frameParsed[1].toUInt(nullptr, 16));
     buildFrame.bus = busNum;
 
     if (buildFrame.frameId() > 0x7FF) buildFrame.setExtendedFrameFormat(true);
     else buildFrame.setExtendedFrameFormat(false);
 
-    buildFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, frameParsed[2].toDouble() * 1000000l));
     //buildFrame.len =  frameParsed[3].length() * 0.5;
 
-    int framelength = 0;
 
-    if(frameParsed.length() == 4)
-    {
-        framelength = frameParsed[3].length() * 0.5;
-    }
+    
 
     QByteArray buildData;
     buildData.resize(framelength);
@@ -302,7 +348,7 @@ QString SocketCANd::decodeFrames(QString data, int busNum)
     for (c = 0; c < framelength; c++)
     {
         bool ok;
-        unsigned char byteVal = frameParsed[3].mid(c*2, 2).toUInt(&ok, 16);
+        unsigned char byteVal = frameParsed[data_index].mid(c*2, 2).toUInt(&ok, 16);
         buildData[c] = byteVal;
     }
     buildFrame.setPayload(buildData);
