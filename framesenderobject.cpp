@@ -140,6 +140,19 @@ FrameSendData *FrameSenderObject::getSendRecordRef(int idx)
     return &sendingData[idx];
 }
 
+void FrameSenderObject::sendOnce(int row){
+   if(mutex.tryLock()){
+        if (row < 0 || row >= sendingData.count()){
+            mutex.unlock();
+            return;
+        }
+       CANConManager::getInstance()->sendFrame(sendingData[row]);
+       mutex.unlock();
+   }
+}
+
+
+
 /// <summary>
 /// Called every millisecond to set the system update figures and send frames if necessary.
 /// </summary>

@@ -25,7 +25,7 @@ CANConnection* CanConFactory::create(type pType, QString pPortName, QString pDri
     case LAWICEL:
         return new LAWICELSerial(pPortName, pSerialSpeed, pBusSpeed, pCanFd, pDataRate);
     case KAYAK:
-        return new SocketCANd(pPortName);
+        return new SocketCANd(pPortName, pCanFd);
     case MQTT:
         return new MQTT_BUS(pPortName);
     case CANSERVER:

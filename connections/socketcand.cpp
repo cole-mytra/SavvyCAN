@@ -156,19 +156,19 @@ bool SocketCANd::piSendFrame(const CANFrame& frame)
     if (frame.hasExtendedFrameFormat()) ID |= 1 << 31;
 
 
-    QString sendStr = ""
+    QString sendStr = "";
     if (frame.hasFlexibleDataRateFormat()){
         // CAN FD Frame
 
-        int flags = 0;
-        if(frame.setBitrateSwitch()){
+        uint16_t flags = 0;
+        if(frame.hasBitrateSwitch()){
             flags |= 0x01;
         }
         if(frame.hasErrorStateIndicator()){
             flags |= 0x02;
         }
 
-        sendStr = "< fdsend " + QString::number(ID, 16) + " " + QString::number(flags) + " " + QString::number(frame.payload().length()) + " ";
+        sendStr = "< fdsend " + QString::number(ID, 16) + " " + QString::number(flags, 16) + " " + QString::number(frame.payload().length()) + " ";
 
     }else{
         sendStr = "< send " + QString::number(ID, 16) + " " + QString::number(frame.payload().length()) + " ";
@@ -306,14 +306,15 @@ QString SocketCANd::decodeFrames(QString data, int busNum)
     int data_index = 0;
     buildFrame.setFrameId(frameParsed[1].toUInt(nullptr, 16));
     if(frameParsed[0] == "fdframe"){
-        buildFrame.setFlexibleDataRateFormat(true)
+        buildFrame.setFlexibleDataRateFormat(true);
+        auto flags = frameParsed[2].toUInt(nullptr, 16);
         // check for BRS
-        if(frameParsed[2]&0x01){
+        if(flags&0x01){
             buildFrame.setBitrateSwitch(true);
         }
         // check for error state indicator
-        if(frameParsed[2]&0x02 > 0){
-            buildFrame.setErrorStateIndicator(true)
+        if((flags&0x02) != 0){
+            buildFrame.setErrorStateIndicator(true);
         }
         buildFrame.setTimeStamp(QCanBusFrame::TimeStamp(0, frameParsed[3].toDouble() * 1000000l));
         if(frameParsed.length() == 5)

@@ -50,6 +50,7 @@ enum SIMP_COL
     SC_COL_DATA = 5,
     SC_COL_INTERVAL = 6,
     SC_COL_COUNT = 7,
+    SC_COL_SEND = 8,
 };
 
 namespace Ui {
@@ -226,7 +227,7 @@ private:
     bool eventFilter(QObject *obj, QEvent *event);
     void manageRowExpansion();
     void disableAutoRowExpansion();
-    void createSenderRow();
+    QPushButton* createSenderRow();
     void processSenderCellChange(int line, int col);
 };
 

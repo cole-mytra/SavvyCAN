@@ -39,10 +39,13 @@ public slots:
     void addSendRecord(FrameSendData record);
     void removeSendRecord(int idx);
     FrameSendData *getSendRecordRef(int idx);
+    void sendOnce(int row);
 
-signals:
+    signals:
+    
+    public slots:
 
-private slots:
+    private slots:
     void timerTriggered();
     void updatedFrames(int);
 
@@ -66,6 +69,7 @@ private:
     CANFrame* lookupFrame(int, int);
     void buildFrameCache();
     void processIncomingFrame(CANFrame *frame);
+
 
     /**
      * @brief starts the device

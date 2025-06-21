@@ -208,7 +208,7 @@ void NewConnectionDialog::selectKayak()
     ui->cbSerialSpeed->setHidden(true);
     ui->lblCANSpeed->setHidden(true);
     ui->lblSerialSpeed->setHidden(true);
-    ui->cbCanFd->setHidden(true);
+    ui->cbCanFd->setHidden(false);
     ui->cbDataRate->setHidden(true);
     ui->lblDataRate->setHidden(true);
 

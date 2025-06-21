@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QFileDialog>
 #include <QtSerialPort/QSerialPortInfo>
+#include <QPushButton>
 #include "connections/canconmanager.h"
 #include "connections/connectionwindow.h"
 #include "helpwindow.h"
@@ -231,8 +232,8 @@ MainWindow::MainWindow(QWidget *parent) :
 
     QStringList headers;
     headers << "En" << "Bus" << "ID" << "Ext" << "Rem" << "Data"
-            << "Interval" << "Count";
-    ui->tableSimpleSender->setColumnCount(8);
+            << "Interval" << "Count" << "";
+    ui->tableSimpleSender->setColumnCount(9);
     ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_EN, 70);
     ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_BUS, 70);
     ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_ID, 70);
@@ -241,11 +242,13 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_DATA, 300);
     ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_INTERVAL, 100);
     ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_COUNT, 100);
+    ui->tableSimpleSender->setColumnWidth(SIMP_COL::SC_COL_SEND, 100);
     ui->tableSimpleSender->setHorizontalHeaderLabels(headers);
 
-    createSenderRow();
-
     frameSender = new FrameSenderObject(model->getListReference());
+    auto pb = createSenderRow();
+
+
 
     frameSender->initialize(); //creates the thread and sets things up
     frameSender->startSending(); //start the timer in the object so enabled things can send
@@ -595,7 +598,7 @@ void MainWindow::processSenderCellChange(int line, int col)
     }
 }
 
-void MainWindow::createSenderRow()
+QPushButton* MainWindow::createSenderRow()
 {
     int row = ui->tableSimpleSender->rowCount();
     ui->tableSimpleSender->insertRow(row);
@@ -623,8 +626,15 @@ void MainWindow::createSenderRow()
             ui->tableSimpleSender->setItem(row, i, item);
         }
     }
+    auto pb = new QPushButton();
+    QObject::connect(pb, &QPushButton::clicked, frameSender, [this, row]{this->frameSender->sendOnce(row);});
+
+
+    pb->setText("Send");
+    ui->tableSimpleSender->setCellWidget(row, SIMP_COL::SC_COL_SEND, pb);
 
     inhibitSenderChanged = false;
+    return pb;
 }
 
 void MainWindow::updateConnectionSettings(QString connectionType, QString port, int speed0, int speed1)
